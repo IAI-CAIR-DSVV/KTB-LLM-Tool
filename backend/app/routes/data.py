@@ -4,11 +4,10 @@ import os
 import json
 import pandas as pd
 import io
-from ..extensions import mongo
-
+from ..extensions import mongo  # Fixed import
+from bson import ObjectId  # Fixed import
 
 bp = Blueprint("data", __name__, url_prefix="/api")
-
 
 @bp.route("/excel-data/<book_id>", methods=["GET"])
 @jwt_required()
@@ -17,15 +16,15 @@ def get_excel_data(book_id):
     print(f"Received request for Book ID: {book_id}, User ID: {user_id}")
 
     try:
-        book_object_id = book_id
+        book_object_id = ObjectId(book_id)  # Fixed ObjectId conversion
     except Exception as e:
         print("❌ Invalid ObjectId format:", e)
         return jsonify({"error": "Invalid book ID format"}), 400
-    print("book object id", book_id)
+    print("book object id", book_object_id)
     
     user_upload = mongo.db.uploads.find_one(
         {"_id": book_object_id, "user_id": user_id},
-        {"_id": 0, "structured_data_path": 1, "fileUrl":1}
+        {"_id": 0, "structured_data_path": 1, "fileUrl": 1}
     )
 
     print("MongoDB Query Result:", user_upload)
@@ -68,10 +67,15 @@ def export_excel():
 
     if not book_id:
         return jsonify({"error": "Book ID is required"}), 400
-    else:
-        book_id = book_id 
+    
+    try:
+        book_object_id = ObjectId(book_id)  # Fixed ObjectId conversion
+    except Exception as e:
+        print("❌ Invalid ObjectId format:", e)
+        return jsonify({"error": "Invalid book ID format"}), 400
+    
     user_upload = mongo.db.uploads.find_one(
-        {"user_id": user_id, "_id": book_id}, 
+        {"user_id": user_id, "_id": book_object_id}, 
         {"structured_data_path": 1, "filename": 1}
     )
     if not user_upload:
@@ -86,11 +90,11 @@ def export_excel():
     # Load structured data from JSON
     with open(structured_data_path, "r", encoding="utf-8") as json_file:
         structured_data = json.load(json_file)
-# Process data into a structured format
+
+    # Process data into a structured format
     extracted_rows = []
     
     for entry in structured_data:
-        # print("Entry:", entry)
         chunk_id = entry.get("Chunk ID")
         source_url = entry.get("Source URL")
         result_data = entry.get("Result")
@@ -106,7 +110,6 @@ def export_excel():
         events = parsed_result.get("Events", [])
 
         if not events:
-            # If no events exist, fill everything with "N/A"
             extracted_rows.append({
                 "Chunk ID": chunk_id,
                 "Source URL": source_url,
@@ -141,7 +144,6 @@ def export_excel():
                 })
 
     # Convert to DataFrame
-    # print("Extracted Rows:", extracted_rows)
     df = pd.DataFrame(extracted_rows)
     output = io.BytesIO()
     
@@ -154,4 +156,3 @@ def export_excel():
     excel_filename = f"{os.path.splitext(original_filename)[0]}.xlsx"
 
     return send_file(output, as_attachment=True, download_name=excel_filename)
-

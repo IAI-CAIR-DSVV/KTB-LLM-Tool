@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 from flask_cors import CORS
 from .config import Config
 from .extensions import mongo, bcrypt, jwt, socketio
@@ -21,7 +21,10 @@ def create_app():
     
     # Debugging MongoDB connection
     with app.app_context():
-        print("MongoDB Instance:", mongo.db)  
+        print("MongoDB Instance:", mongo.db)
+    @app.route("/")
+    def index():
+        return render_template("index.html")
     
     # Register blueprints
     app.register_blueprint(auth.bp)
