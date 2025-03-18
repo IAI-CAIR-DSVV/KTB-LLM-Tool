@@ -1,232 +1,20 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import { api } from "../api/api";
-import { useNavigate } from "react-router-dom"
-import { io } from "socket.io-client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import spinnerImage from "../assets/image.png";
-import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useWebSocket } from "../context/WebSocketContext";
 import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
+import { motion } from "framer-motion";
+import spinnerImage from "../assets/image.png";
 
 const Dashboard = () => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [toastMessage, setToastMessage] = useState(null);
-  const [toastType, setToastType] = useState("");
   const navigate = useNavigate();
-  const [progress, setProgress] = useState();
-  const socketRef = useRef(null);
-  const [uploadingStarted, setUploadingStarted] = useState(false);
-  const [processedChunks, setProcessedChunks] = useState(0);
-  const [totalChunks, setTotalChunks] = useState(1);
-  const queryClient = useQueryClient();
-  const [toastTimestamp, setToastTimestamp] = useState(Date.now());
-  const [uploadStatus, setUploadStatus] = useState();
-  const [successMessage, setSuccessMessage] = useState("");
-  const [processingCompletedMessage, setProcessingCompletedMessage] = useState("");
-  
 
-
-  useEffect(() => {
-    if (toastMessage) {
-      if (toastType === "success") {
-        toast.success(toastMessage, {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          theme: "colored"
-        });
-      } else if (toastType === "error") {
-        toast.error(toastMessage, {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          theme: "colored",
-        });
-      }
-
-      setToastMessage(null);
-    }
-  }, [toastMessage, toastType]);
-
-  useEffect(() => {
-    const savedBookId = localStorage.getItem("book_id");
-    const savedProgress = localStorage.getItem("progress");
-    const savedProcessedChunks = localStorage.getItem("processedChunks");
-    const savedTotalChunks = localStorage.getItem("totalChunks");
-    const savedUploadingStarted = localStorage.getItem("uploadingStarted");
-
-    console.log("Uploading Started State:", savedUploadingStarted);
-    console.log("Restoring from localStorage:");
-    console.log("Book ID:", savedBookId);
-    console.log("Progress:", savedProgress);
-    console.log("Processed Chunks:", savedProcessedChunks);
-    console.log("Total Chunks:", savedTotalChunks);
-
-
-    if (savedProgress) setProgress(savedProgress);
-    if (savedProcessedChunks && savedTotalChunks) {
-      setProcessedChunks(parseInt(savedProcessedChunks, 10));
-      setTotalChunks(parseInt(savedTotalChunks, 10));
-    }
-
-    if (savedUploadingStarted !== null) {
-      setUploadingStarted(savedUploadingStarted === "true");
-    } else {
-      setUploadingStarted(false);
-    }
-
-    if (savedBookId && socketRef.current) {
-      console.log("Restoring processing for book_id:", savedBookId);
-      setTimeout(() => {
-        socketRef.current.emit("start_process", { book_id: savedBookId });
-      }, 1000);
-    }
-  }, []);
-
-
-  useEffect(() => {
-    if (!socketRef.current) {
-      setProgress("Connecting to Server...");
-      socketRef.current = io(api, {
-        transports: ["websocket"],
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 2000,
-      });
-
-      // ✅ Connection success
-      socketRef.current.on("connect", () => {
-        setProgress("Connected to Server ✅");
-        console.log("Connected to the server ✅");
-        setToastMessage("Connected to the server ✅");
-        setToastType("success");
-      });
-      socketRef.current.on("reconnect", (attempt) => {
-        console.log(`Reconnected after ${attempt} attempts`);
-        setProgress("Reconnected to server ✅");
-
-        // Try resuming processing
-        const savedBookId = localStorage.getItem("book_id");
-        if (savedBookId) {
-          console.log("Resuming process for book_id:", savedBookId);
-          socketRef.current.emit("start_process", { book_id: savedBookId });
-        }
-      });
-
-      // ❌ Connection error
-      socketRef.current.on("connect_error", (error) => {
-        console.error("Server connection failed ❌. Retrying...");
-        setProgress("Server connection failed. Retrying... 🔄");
-        setToastMessage("Server connection failed. Retrying...");
-        setToastType("error");
-      });
-
-      // ✅ Progress updates
-      socketRef.current.on("progress_update", (data) => {
-        if (data.message) {
-          setProgress(data.message);
-          localStorage.setItem("progress", data.message); // ✅ Store progress in localStorage
-
-          const match = data.message.match(/Processing chunk (\d+)\/(\d+)/);
-          if (match) {
-            const processed = parseInt(match[1], 10);
-            const total = parseInt(match[2], 10);
-            setProcessedChunks(processed);
-            setTotalChunks(total);
-
-            localStorage.setItem("processedChunks", processed); // ✅ Store chunks progress
-            localStorage.setItem("totalChunks", total);
-          }
-        }
-      });
-
-      // ✅ Upload status updates
-      socketRef.current.on("upload_status", (data) => {
-        if (data.message) {
-          console.log("Upload status update", data.message);
-          localStorage.setItem("progress", data.message);
-          toast.success(data.message, {
-            position: "top-right",
-            autoClose: 3000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-            theme: "colored",
-          });
-        }
-      });
-
-      // ✅ Completed process
-      socketRef.current.on("completed", () => {
-        setProgress("Processing completed! 🎉");
-        setToastMessage("Processing completed! 🎉");
-        setToastType("success");
-        // setIsProcessingComplete(true);
-        localStorage.setItem("progress", "Processing completed! 🎉");
-
-        // Reset upload state after completion
-        setUploadingStarted(false);
-        // localStorage.removeItem("uploadingStarted");
-      });
-
-
-      // ❌ Error Handling
-      socketRef.current.on("error", (error) => {
-        console.error("WebSocket error:", error);
-        const errorMessage = error?.message || "Unknown error occurred";
-        setProgress(`Error occurred: ${errorMessage}`);
-        setToastMessage(`Error: ${errorMessage}`);
-        setToastType("error");
-        localStorage.setItem("progress", `Error: ${errorMessage}`);
-        localStorage.removeItem("uploadingStarted");
-      });
-    }
-
-    // ✅ Cleanup function to prevent duplicate connections
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off("progress_update");
-        socketRef.current.off("upload_status");
-        socketRef.current.off("completed");
-        socketRef.current.off("error");
-        socketRef.current.off("connect");
-        socketRef.current.off("connect_error");
-
-        socketRef.current.disconnect();
-        socketRef.current = null;
-
-
-      }
-    };
-  }, []);
-
-
-  useEffect(() => {
-    if (processedChunks > 0 && processedChunks === totalChunks && uploadingStarted) {
-      setUploadingStarted(false); // Hide spinner & progress bar
-      localStorage.setItem("uploadingStarted", "false");
-      setProcessingCompletedMessage("PDF processed successfully! Redirecting to Excel Viewer...");
-      setTimeout(() => {
-        localStorage.removeItem("progress");
-        localStorage.removeItem("processedChunks");
-        localStorage.removeItem("totalChunks");
-        localStorage.removeItem("uploadingStarted");
-        localStorage.removeItem("book_id");
-        console.log("localStorage cleared, navigating to /excelViewer...");
-        navigate("/excelViewer");
-      }, 1000);
-    }
-  }, [processedChunks, totalChunks, uploadingStarted, navigate]);
+  // 🔗 Access WebSocket Context
+  const { progress, processedChunks, totalChunks, uploadingStarted, setUploadingStarted, socket, processingCompleted } = useWebSocket();
 
   const isPDF = (file) => {
     return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -249,122 +37,84 @@ const Dashboard = () => {
     if (uploadedFile && isPDF(uploadedFile)) {
       setFile(uploadedFile);
     } else {
-      setFile(null);
-      setToastMessage("Please upload a valid PDF file.");
-      setToastType("error");
+      toast.error("Please upload a valid PDF file.");
     }
   };
 
   const handleUpload = useMutation({
     mutationFn: async (file) => {
       if (!file) {
-        setToastMessage("Please select a file before uploading.");
-        setToastType("error");
+        toast.error("Please select a file before uploading.");
         return;
       }
       setUploading(true);
       setUploadingStarted(true);
 
+
       const token = localStorage.getItem("token");
       if (!token) {
-        setToastMessage("Authentication error. Please login again.");
-        setToastType("error");
-        setUploading(false);
+        toast.error("Authentication error. Please login again.");
+        setUploadingStarted(false);
         return;
       }
-      const formData = new FormData();
 
+      const formData = new FormData();
       formData.append("pdf", file);
+
       try {
         const response = await axios.post(`${api}/api/upload-pdf`, formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
           withCredentials: true,
         });
+
         if (response.data.book_id) {
-          localStorage.setItem("book_id", response.data.book_id); // ✅ Store book_id
-          console.log("Stored book_id:", response.data.book_id);
+          localStorage.setItem("bookId", response.data.book_id);
+          console.log("Stored bookId:", response.data.book_id);
         }
 
         return response.data;
       } catch (error) {
-        setToastMessage("Error uploading file. Please try again.");
-        setToastType("error");
-        console.error("Error uploading file:", error);
+        toast.error("Error uploading file. Please try again.");
         throw error;
       }
     },
 
-    onSuccess: (data) => {
-      const bookId = data?.book_id;
-      if (bookId) {
-        localStorage.setItem("book_id", bookId);
-      }
-
-      if (socketRef.current && bookId) {
-        console.log("Resuming process for book_id:", bookId);
-        socketRef.current.emit("start_process", { book_id: bookId });
-      } else {
-        console.error("WebSocket not connected ❌");
-      }
-
-      setToastMessage("Upload successful!");
-      setToastType("success");
+    onSuccess: () => {
+      toast.success("Upload successful!");
       setFile(null);
-      queryClient.invalidateQueries(["uploadedFiles"]);
-      setUploading(false);
-
-      localStorage.setItem("uploadingStarted", "true");
       setUploadingStarted(true);
-
     },
 
-    onError: (error) => {
-      setToastMessage(error.message || "Error uploading file.");
-      setToastType("error");
-      setUploading(false);
+    onError: () => {
       setUploadingStarted(false);
-      // localStorage.removeItem("uploadingStarted"); // ❌ Clear upload state on failure
     },
   });
+
+  useEffect(() => {
+    if (processingCompleted && processedChunks === totalChunks) {
+      const storedBookId = localStorage.getItem("bookId"); 
+      localStorage.setItem("latestBookId", storedBookId);
+      console.log("Stored bookId:", storedBookId);
+      localStorage.removeItem("progress");
+      localStorage.removeItem("processedChunks");
+      localStorage.removeItem("totalChunks");
+
+      setTimeout(() => {
+        console.log("✅ Processing completed! Navigating to /excelViewer with book_id:", storedBookId);
+
+        navigate("/excelViewer", { state: { book_id: storedBookId } }); 
+
+      }, 1000);
+    }
+  }, [processingCompleted, processedChunks, totalChunks, navigate]);
+
   return (
     <div className="flex flex-col h-screen">
       <div className="flex flex-1 justify-center items-center">
         <div className={`flex flex-col items-center p-6 ${uploadingStarted ? "pointer-events-none" : ""}`}>
 
           {/* ✅ Show Success Message Instead of Dropzone */}
-          {processingCompletedMessage ? (
-            <div className="flex items-center justify-center w-full h-64 border-2 border-blue-800 border-dashed rounded-lg bg-gray-200"
-              style={{ width: "800px", height: "400px" }}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className="flex items-center justify-center w-full h-64 rounded-lg relative overflow-hidden shadow-lg animate-gradient"
-                style={{ width: "800px", height: "400px" }}
-              >
-                {/* 🔹 Animated Background */}
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
-
-                {/* 🔹 Glowing Border */}
-                <div className="absolute inset-0 border-4 border-transparent rounded-lg animate-border-glow" />
-
-                {/* 🔹 Success Message with Animated Text */}
-                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="text-white text-xl font-bold relative z-10 drop-shadow-lg"
-                >
-                  🎉 {processingCompletedMessage} 🎉
-                </motion.p>
-              </motion.div>
-
-            </div>
-          ) : uploadingStarted || processedChunks > 0 ? (
+          {uploadingStarted || processedChunks > 0 ? (
             // 🔄 Uploading Spinner & Progress Bar
             <div className="flex flex-col items-center justify-center border-2 border-blue-800 border-dashed rounded-lg bg-gray-200 bg-opacity-80 p-4"
               style={{ width: "800px", height: "400px" }}>
@@ -460,4 +210,5 @@ const Dashboard = () => {
     </div>
   );
 }
+
 export default Dashboard;

@@ -68,7 +68,6 @@ def upload_pdf():
     socketio.emit("upload_status", {"message": "Processing PDF chunks...","book_id": book_id})
 
 
-    # Extract and process chunks
     chunks_with_sources = process_and_get_chunks(file_path, unique_folder_name, filename)
 
     def save_chunks_to_csv(chunks_with_sources, book_folder, book_name):
@@ -111,10 +110,9 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
     total_chunks_csv = 0
     with open(csv_file_path, "r", encoding="utf-8") as file:
         reader = csv.reader(file)
-        next(reader)  # Skip header row
+        next(reader)  
         total_chunks_csv = sum(1 for _ in reader)     
 
-    # ✅ STEP 2: Emit Total Chunks Count to WebSocket
     socketio.emit("upload_status", {
         "message": f"Total {total_chunks_csv} chunks identified.",
         "total_chunks": total_chunks_csv,
@@ -122,7 +120,6 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
         "book_id": book_id
     })
     
-    # ✅ **STEP 3: Send Chunks to LLM & Emit Real-time Progress**
     with open(csv_file_path, "r", encoding="utf-8") as file:
         csv_content = file.read()   
     
@@ -160,8 +157,8 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
             json_file.write("[")  
 
             first_entry = True
-            total_chunks = 0  # ✅ Track number of received chunks
-            start_time = time.time()  # ✅ Track time
+            total_chunks = 0
+            start_time = time.time()
             processed_chunks = 0
             
             print("\n📡 Waiting for response...\n")
@@ -171,8 +168,8 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
                 if line:
                     decoded_line = line.decode("utf-8").replace("data: ", "").strip()
                     try:
-                        print(f"📥 Model Response: {decoded_line}")  # ✅ Log every received response
-                        socketio.emit("model_response", {"chunk": decoded_line},room=book_id)  # ✅ Emit each response to frontend
+                        print(f"📥 Model Response: {decoded_line}") 
+                        socketio.emit("model_response", {"chunk": decoded_line},room=book_id)
 
                         chunk_response = json.loads(decoded_line)
                         structured_data.append(chunk_response)
@@ -187,9 +184,6 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
                         
                         progress_percent = int((processed_chunks / total_chunks_csv) * 100) if total_chunks_csv > 0 else 0
 
-
-
-                        # ✅ Emit Real-Time Progress to UI
                         socketio.emit("progress_update", {
                             "message": f"Processing chunk {processed_chunks}/{total_chunks_csv}...",
                             "progress": progress_percent,
@@ -202,9 +196,9 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
                     except json.JSONDecodeError:
                         print(f"{decoded_line}")
 
-            json_file.write("]")  # Close JSON array
+            json_file.write("]")
 
-            end_time = time.time()  # ✅ Capture end time
+            end_time = time.time()
             print(f"\n✅ Done! Received {total_chunks} chunks in {end_time - start_time:.2f} seconds.")
 
             socketio.emit("progress_update", {
@@ -218,8 +212,6 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
     except requests.exceptions.RequestException as e:
         socketio.emit("progress_update", {"message": "Error communicating with LLM", "progress": -1, "book_id": book_id})
         return jsonify({"error": f"Error communicating with LLM: {str(e)}"}), 500     
-
-    # ✅ NOW Save Record to MongoDB (AFTER JSON is fully written)
     try:
         
         upload_record = {
@@ -233,7 +225,7 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
             "structured_data_path": structured_data_path  
         }
 
-        result = mongo.db.uploads.insert_one(upload_record)  # ✅ Fix: Execute MongoDB insert
+        result = mongo.db.uploads.insert_one(upload_record)
         print("✅ MongoDB record saved successfully:",book_id, result.inserted_id)
     
     except Exception as e:
@@ -241,8 +233,8 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
         socketio.emit("progress_update", {"message": "Database save failed", "progress": -1,"book_id": book_id})
         return jsonify({"error": "Failed to save data in the database"}), 500
 
-    # ✅ Notify UI that everything is completed
-    socketio.emit("progress_update", {
+    
+    socketio.emit("completed", {
         "message": "✅ File processing & storage complete!",
         "progress": 100,
         "book_id": book_id
@@ -256,9 +248,6 @@ def send_chunks_to_llm(book_id, csv_file_path, book_folder, book_name, user_id, 
     }), 200  
 
 # --------------------------------------------------------------------Function for Data Routes----------------------------------------------------------------------
-    # structured_data_response = get_excel_data()
-    # return structured_data_response 
-
 
 @bp.route("/uploads/<path:file_path>")
 def serve_file(file_path):

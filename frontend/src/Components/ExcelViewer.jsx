@@ -5,7 +5,8 @@ import { saveAs } from "file-saver";
 import { FaSearch, FaFilter, FaSort, FaDownload, FaCopy, FaExpand, FaCompress } from "react-icons/fa";
 import { api } from "../api/api";
 import { useLocation } from "react-router-dom";
-import { useWebSocket } from "../utils/WebSocketProvider";
+import { useWebSocket } from "../context/WebSocketContext";
+
 
 const ExcelViewer = () => {
     const [data, setData] = useState([]);
@@ -22,17 +23,9 @@ const ExcelViewer = () => {
     const filenameFromURL = location.state?.filename || localStorage.getItem("filename");
     const [pdfName, setPdfName] = useState("");
     const [pdfUrl, setPdfUrl] = useState(localStorage.getItem("fileUrl") || "");
-    // const { socket } = useWebSocket();
+    const { socket } = useWebSocket();
 
-    // useEffect(() => {
-    //     if (!socket) return;
 
-    //     socket.on("pdfUrl", (data) => {
-    //         console.log("🔗 Received pdfUrl from socket:", data);
-    //         setPdfUrl(data);
-    //     }
-    //     );
-    // }, [socket]);
 
     useEffect(() => {
         const queryParams = new URLSearchParams(window.location.search);

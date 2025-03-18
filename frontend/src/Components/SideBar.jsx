@@ -20,6 +20,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     }
   }, [location.state?.book_id]);
 
+  // useEffect(() => {
+  //   const latestBookId = localStorage.getItem("latestBookId");
+  //   if (latestBookId) {
+  //     setSelectedBookId(latestBookId);
+  //   }
+  // }, []);
+  
+
   const fetchUploadHistory = async () => {
     const token = localStorage.getItem("token");
     if (!token) throw new Error("No token found. Please log in.");

@@ -10,7 +10,7 @@ import ProtectedRoute from "../src/protectedRoute/ProtectedRoute";
 import { ToastContainer } from "react-toastify";
 import { toast } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css";
-// import { WebSocketProvider } from "./utils/WebSocketProvider";
+import { WebSocketProvider } from "./context/WebSocketContext";
 
 function App() {
   
@@ -30,14 +30,14 @@ function App() {
 
   return (
     <GoogleOAuthProvider clientId="364205782321-tcdg1lfsn9psg8c6qft9pv1mlp9tv2j9.apps.googleusercontent.com"> 
-      {/* <WebSocketProvider> */}
+      <WebSocketProvider>
       <Router>
         <div className="App">
         <ToastContainer />
           <AppRoutes token={token} handleLogin={handleLogin} />
         </div>
       </Router>
-      {/* </WebSocketProvider> */}
+      </WebSocketProvider>
     </GoogleOAuthProvider>
   );
 }

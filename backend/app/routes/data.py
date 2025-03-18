@@ -78,7 +78,7 @@ def export_excel():
         return jsonify({"error": "No structured data found"}), 404
 
     structured_data_path = user_upload.get("structured_data_path")
-    original_filename = user_upload.get("filename", "structured_data")  # Default if missing
+    original_filename = user_upload.get("filename", "structured_data")
 
     if not structured_data_path or not os.path.exists(structured_data_path):
         return jsonify({"error": "Structured data file not found"}), 404
